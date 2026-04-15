@@ -46,7 +46,7 @@ nav.scrolled{box-shadow:var(--shadow-sm)}
 
 /* ── LAYOUT ── */
 main{padding-top:var(--nav-h)}
-.section{max-width:1340px;margin:0 auto;padding:14px 22px 72px}
+.section{max-width:1340px;margin:0 auto;padding:6px 22px 72px}
 .section-header{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 .section-title{font-family:var(--font-d);font-size:1.6rem;font-weight:400}
 .section-title small{display:block;font-family:var(--font-b);font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
@@ -125,7 +125,7 @@ main{padding-top:var(--nav-h)}
 body:not(.admin-mode) .admin-only-btn{display:none!important}
 
 /* ── QUICK NAV BUTTONS ── */
-.quick-nav{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;padding:0 0 14px 0}
+.quick-nav{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;padding:0 0 6px 0}
 .quick-nav-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 16px;font-size:.78rem;font-weight:700;color:var(--accent-dk);background:var(--surface);border:1.5px solid var(--accent-lt);border-radius:50px;cursor:pointer;transition:all var(--tr);white-space:nowrap;box-shadow:var(--shadow-sm);letter-spacing:.02em}
 .quick-nav-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:var(--shadow-md)}
 .quick-nav-btn svg{flex-shrink:0}
@@ -869,24 +869,28 @@ function renderImages(images,hasMore){
 }
 
 /* ════════════ SELECTION ════════════ */
+let _capVisibleId=null;
 function handleImgClick(e,id,idx){
   e.stopPropagation();
   if(isAdmin&&(e.ctrlKey||e.metaKey||e.shiftKey)){e.preventDefault();ctxSelect(e,id);return;}
   if(selectedIds.size>0){ctxSelect(e,id);return;}
+  if(_capVisibleId&&_capVisibleId!==id){
+    const other=document.getElementById('ic-'+_capVisibleId);
+    if(other)other.classList.remove('cap-visible');
+    _capVisibleId=null;
+  }
   const card=document.getElementById('ic-'+id);
   if(!card)return;
-  // 關閉其他已展開的卡片
-  document.querySelectorAll('.img-card.cap-visible').forEach(c=>{if(c!==card){c.classList.remove('cap-visible');delete c.dataset.capShown;}});
-  if(!card.dataset.capShown){
-    // 第一次點擊：顯示說明與分享
-    card.classList.add('cap-visible');
-    card.dataset.capShown='1';
-  } else {
+  if(_capVisibleId===id){
     // 第二次點擊：開燈箱
     card.classList.remove('cap-visible');
-    delete card.dataset.capShown;
+    _capVisibleId=null;
     const fi=filteredImages.findIndex(i=>i.id===id);
     openLightbox(fi>=0?fi:idx);
+  } else {
+    // 第一次點擊：顯示說明與分享按鈕
+    card.classList.add('cap-visible');
+    _capVisibleId=id;
   }
 }
 function ctxSelect(e,id){e.stopPropagation();selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);updateSelection();}
