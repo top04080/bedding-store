@@ -145,13 +145,10 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .admin-mode .img-card.drag-over-img{outline:2.5px dashed var(--accent);outline-offset:-2px}
 .img-card img{width:100%;height:100%;object-fit:cover;transition:transform .45s ease}
 .img-card:hover img{transform:scale(1.05)}
-.img-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,transparent 60%);opacity:0;transition:opacity var(--tr);display:flex;align-items:flex-end;padding:10px;pointer-events:none}
-.img-card.cap-visible .img-overlay{opacity:1;pointer-events:none}
+.img-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.62) 0%,transparent 55%);opacity:1;transition:opacity var(--tr);display:flex;align-items:flex-end;padding:10px;pointer-events:none}
 .img-caption-text{color:#FFE566;font-size:.85rem;font-weight:600;line-height:1.35;word-break:break-all;text-shadow:0 1px 4px rgba(0,0,0,.7);flex:1;padding-right:34px}
-/* share btn: show on hover OR when cap-visible */
-.img-share-btn{position:absolute;bottom:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;color:var(--accent-dk);box-shadow:0 2px 8px rgba(0,0,0,.22);opacity:0;transition:opacity var(--tr),background var(--tr),transform var(--tr);z-index:5;pointer-events:none}
-.img-card.cap-visible .img-share-btn{opacity:1;pointer-events:auto}
-.img-card:hover .img-share-btn{opacity:1;pointer-events:auto}
+/* share btn: always visible */
+.img-share-btn{position:absolute;bottom:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;color:var(--accent-dk);box-shadow:0 2px 8px rgba(0,0,0,.22);opacity:1;transition:opacity var(--tr),background var(--tr),transform var(--tr);z-index:5;pointer-events:auto}
 .img-share-btn:hover{background:var(--accent);color:#fff;transform:scale(1.1)}
 .sel-check{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:none;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;z-index:3}
 .img-card.selected .sel-check{display:flex}
@@ -869,30 +866,14 @@ function renderImages(images,hasMore){
 }
 
 /* ════════════ SELECTION ════════════ */
-let _capVisibleId=null;
+let _capVisibleId=null; // kept for legacy refs
 function handleImgClick(e,id,idx){
   e.stopPropagation();
   if(isAdmin&&(e.ctrlKey||e.metaKey||e.shiftKey)){e.preventDefault();ctxSelect(e,id);return;}
   if(selectedIds.size>0){ctxSelect(e,id);return;}
-  // 關閉其他已展開的卡片
-  if(_capVisibleId&&_capVisibleId!==id){
-    const other=document.getElementById('ic-'+_capVisibleId);
-    if(other)other.classList.remove('cap-visible');
-    _capVisibleId=null;
-  }
-  const card=document.getElementById('ic-'+id);
-  if(!card)return;
-  if(_capVisibleId===id){
-    // 第二次點擊：進入燈箱
-    card.classList.remove('cap-visible');
-    _capVisibleId=null;
-    const fi=filteredImages.findIndex(i=>i.id===id);
-    openLightbox(fi>=0?fi:idx);
-  } else {
-    // 第一次點擊：同時顯示說明文字 + 分享按鈕
-    card.classList.add('cap-visible');
-    _capVisibleId=id;
-  }
+  // 直接進入燈箱
+  const fi=filteredImages.findIndex(i=>i.id===id);
+  openLightbox(fi>=0?fi:idx);
 }
 function ctxSelect(e,id){e.stopPropagation();selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);updateSelection();}
 function updateSelection(){
@@ -1533,8 +1514,12 @@ function lpStart(e,id){
   _lpId=id;
   _lpTimer=setTimeout(()=>{
     if(!_lpMoved){
-      navigator.vibrate&&navigator.vibrate(30);
+      navigator.vibrate&&navigator.vibrate(40);
       ctxSelect({stopPropagation:()=>{}},id);
+      // 第一次進入多選模式時提示
+      if(selectedIds.size===1){
+        showToast('已選取，可繼續長按選取更多 → 點「分享」批次分享','success');
+      }
     }
   },480);
 }
