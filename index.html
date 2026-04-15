@@ -312,6 +312,11 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .spinner{width:34px;height:34px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* ── FLOATING BACK BUTTON ── */
+#float-back-btn{position:fixed;top:calc(var(--nav-h) + 10px);left:12px;z-index:99;display:none;align-items:center;gap:6px;padding:7px 14px;font-size:.78rem;font-weight:700;color:var(--text);border-radius:50px;border:1.5px solid rgba(229,221,211,.7);background:rgba(250,248,244,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);cursor:pointer;transition:all var(--tr);white-space:nowrap;box-shadow:0 2px 10px rgba(42,37,32,.10)}
+#float-back-btn.show{display:inline-flex}
+#float-back-btn:hover{background:rgba(196,149,106,.85);color:#fff;border-color:var(--accent);box-shadow:var(--shadow-sm)}
+
 /* ── RESPONSIVE ── */
 @media(max-width:900px){nav{padding:0 16px}.section{padding:22px 13px 56px}.albums-grid{grid-template-columns:repeat(2,1fr);gap:10px}.images-grid{grid-template-columns:repeat(2,1fr);gap:9px}.album-sel-grid{grid-template-columns:1fr}.move-album-grid{grid-template-columns:1fr}}
 @media(max-width:480px){.albums-grid{grid-template-columns:repeat(2,1fr);gap:8px}}
@@ -576,6 +581,12 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
     </div>
   </div>
 </div>
+
+<!-- FLOAT BACK BUTTON -->
+<button id="float-back-btn" onclick="goHome()">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+  返回主頁
+</button>
 
 <div id="toast-wrap"></div>
 
@@ -1009,9 +1020,21 @@ function closeLightbox(){
 function lbNav(d){
   if(lbScale>1){resetZoom();return;}
   const imgs=filteredImages.length?filteredImages:currentImages;
-  lbIndex=(lbIndex+d+imgs.length)%imgs.length;
-  const el=lbImgEl();el.style.transition='opacity .14s';el.style.opacity='0';
-  setTimeout(()=>{showLbImg();el.style.opacity='1';},130);
+  const newIdx=(lbIndex+d+imgs.length)%imgs.length;
+  const el=lbImgEl();
+  const outX=d>0?'-110vw':'110vw';
+  const inX=d>0?'110vw':'-110vw';
+  el.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+  el.style.transform='translateX('+outX+')';
+  setTimeout(()=>{
+    lbIndex=newIdx;
+    el.style.transition='none';
+    el.style.transform='translateX('+inX+')';
+    showLbImg();
+    el.getBoundingClientRect(); // force reflow
+    el.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+    el.style.transform='translateX(0)';
+  },220);
 }
 function showLbImg(){
   const imgs=filteredImages.length?filteredImages:currentImages;
@@ -1051,7 +1074,7 @@ function applyZoom(scale,tx,ty){
   ind.classList.add('show');
   clearTimeout(_zTimer);_zTimer=setTimeout(()=>ind.classList.remove('show'),1200);
 }
-function resetZoom(){lbScale=1;lbTX=0;lbTY=0;const el=lbImgEl();if(el){el.style.transform='scale(1) translate(0,0)';}}
+function resetZoom(){lbScale=1;lbTX=0;lbTY=0;const el=lbImgEl();if(el){el.style.transition='none';el.style.transform='';lbTX=0;lbTY=0;}}
 
 /* Keyboard */
 document.addEventListener('keydown',e=>{
@@ -1109,6 +1132,30 @@ lbArea.addEventListener('wheel',e=>{
   e.preventDefault();
   applyZoom(lbScale*(e.deltaY>0?0.85:1.18));
 },{passive:false});
+
+/* ════════════ ALBUM VIEW – SWIPE RIGHT TO GO HOME ════════════ */
+{
+  let _avSwX=0,_avSwY=0,_avActive=false;
+  const albumViewEl=document.getElementById('album-view');
+  albumViewEl.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1)return;
+    _avSwX=e.touches[0].clientX;
+    _avSwY=e.touches[0].clientY;
+    _avActive=true;
+  },{passive:true});
+  albumViewEl.addEventListener('touchmove',e=>{
+    if(!_avActive||e.touches.length!==1)return;
+  },{passive:true});
+  albumViewEl.addEventListener('touchend',e=>{
+    if(!_avActive)return;
+    _avActive=false;
+    if(document.getElementById('lightbox').classList.contains('open'))return;
+    const dx=e.changedTouches[0].clientX-_avSwX;
+    const dy=e.changedTouches[0].clientY-_avSwY;
+    // Swipe right: positive dx, mostly horizontal, sufficient distance
+    if(dx>80&&Math.abs(dy)<Math.abs(dx)*0.65){goHome();}
+  },{passive:true});
+}
 
 /* ════════════ SHARE ════════════ */
 let _shareItems=[];
@@ -1195,6 +1242,7 @@ document.getElementById('share-modal').addEventListener('click',e=>{if(e.target=
 
 /* ════════════ HOME ════════════ */
 function goHome(){
+  document.getElementById('float-back-btn').classList.remove('show');
   document.getElementById('albums-view').style.display='block';
   document.getElementById('album-view').style.display='none';
   document.getElementById('hero-section').style.display='block';
@@ -1209,7 +1257,13 @@ function goHome(){
   document.getElementById('search-clear').classList.remove('show');
   currentAlbumId=null;selectedIds.clear();closeAdminPanel();
 }
-window.addEventListener('scroll',()=>document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10));
+window.addEventListener('scroll',()=>{
+  document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10);
+  const av=document.getElementById('album-view');
+  const fb=document.getElementById('float-back-btn');
+  if(av.style.display!=='none'&&window.scrollY>80){fb.classList.add('show');}
+  else{fb.classList.remove('show');}
+});
 
 /* ════════════ ADMIN LOGIN ════════════ */
 function toggleAdmin(){
