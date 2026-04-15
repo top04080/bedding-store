@@ -4,11 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>恒鵬寢具 | 精選寢具展示</title>
-  <meta property="og:title" content="恒鵬寢具 | 精選寢具展示">
-<meta property="og:description" content="恒鵬寢具精選床包、被套、枕頭等寢具商品展示">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://top04080.github.io/bedding-store/">
-<meta name="description" content="恒鵬寢具精選床包、被套、枕頭等寢具商品展示">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Noto+Serif+TC:wght@300;400;500&family=Nunito:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -307,10 +302,7 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .share-btn.disabled{opacity:.45;pointer-events:none}
 .share-hint{font-size:.75rem;color:var(--text-muted);text-align:center;margin-top:9px;min-height:1em}
 
-/* ── BANNER ── */
-#config-banner{background:#FFF3CD;border-bottom:1px solid #FFEAA7;padding:9px 18px;text-align:center;font-size:.79rem;color:#856404;position:fixed;top:0;left:0;right:0;z-index:500;display:none}
-#config-banner a{color:var(--accent-dk);font-weight:700;cursor:pointer}
-.banner-active nav{top:40px}.banner-active .hero{padding-top:calc(var(--nav-h)+68px)}.banner-active main{padding-top:calc(var(--nav-h)+40px)}
+
 
 /* ── TOAST ── */
 #toast-wrap{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:600;display:flex;flex-direction:column;align-items:center;gap:7px;pointer-events:none}
@@ -329,11 +321,6 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 </style>
 </head>
 <body>
-
-<div id="config-banner">
-  ⚠️ 尚未完成設定 (Cloudinary 或 JSONBin) — 上傳後圖片無法跨裝置顯示 ·
-  <a onclick="openGuide()">查看說明</a>
-</div>
 
 <!-- NAV -->
 <nav id="navbar">
@@ -529,7 +516,7 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
     <div class="modal-icon">🔐</div>
     <div class="modal-title">管理員登入</div>
     <div class="modal-sub">請輸入管理密碼以進入後台</div>
-    <div class="field"><label>管理密碼</label><input type="password" id="pw-input" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')doLogin();" ></div>
+    <div class="field"><label>管理密碼</label><input type="password" id="pw-input" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="modal-err" id="login-err">密碼錯誤，請再試一次</div>
     <div class="modal-btns">
       <button class="btn btn-secondary" onclick="closeLoginModal()">取消</button>
@@ -650,10 +637,6 @@ const PAGE=40;
 
 /* ════════════ INIT ════════════ */
 function init(){
-  if(!cloudReady||!jbReady){
-    document.getElementById('config-banner').style.display='block';
-    document.body.classList.add('banner-active');
-  }
   const saved=localStorage.getItem(LS_ALBUMS);
   allAlbums=saved?JSON.parse(saved):DEFAULT_ALBUMS.map((a,i)=>({...a,coverUrl:'',imageCount:0,order:i,images:[]}));
   renderAlbums(allAlbums);
@@ -1267,7 +1250,7 @@ async function doLogin(){
     document.getElementById('admin-btn').classList.add('active-admin');
     document.getElementById('admin-btn').innerHTML=`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> 退出管理`;
     if(currentAlbumId)document.getElementById('batch-hint').style.display='block';
-    renderAlbums(allAlbums);// re-render to show drag handles
+    renderAlbums(allAlbums);
     openAdminPanel();populatePanel();showToast('✅ 已進入管理模式','success');
   }else{
     document.getElementById('login-err').classList.add('show');
