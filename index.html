@@ -794,7 +794,7 @@ function loadImages(){
 }
 function applyImgSearch(){
   const q=_imgSearchQ.toLowerCase().trim();
-  filteredImages=q?currentImages.filter(i=>(i.name||'').toLowerCase().includes(q)||(i.caption||'').toLowerCase().includes(q)):currentImages;
+  filteredImages=q?currentImages.filter(i=>(i.caption||'').toLowerCase().includes(q)):currentImages;
   renderImages(filteredImages.slice(0,(currentPage+1)*PAGE), filteredImages.length>(currentPage+1)*PAGE);
 }
 function filterImages(q){
@@ -874,6 +874,7 @@ function handleImgClick(e,id,idx){
   e.stopPropagation();
   if(isAdmin&&(e.ctrlKey||e.metaKey||e.shiftKey)){e.preventDefault();ctxSelect(e,id);return;}
   if(selectedIds.size>0){ctxSelect(e,id);return;}
+  // 關閉其他已展開的卡片
   if(_capVisibleId&&_capVisibleId!==id){
     const other=document.getElementById('ic-'+_capVisibleId);
     if(other)other.classList.remove('cap-visible');
@@ -882,13 +883,13 @@ function handleImgClick(e,id,idx){
   const card=document.getElementById('ic-'+id);
   if(!card)return;
   if(_capVisibleId===id){
-    // 第二次點擊：開燈箱
+    // 第二次點擊：進入燈箱
     card.classList.remove('cap-visible');
     _capVisibleId=null;
     const fi=filteredImages.findIndex(i=>i.id===id);
     openLightbox(fi>=0?fi:idx);
   } else {
-    // 第一次點擊：顯示說明與分享按鈕
+    // 第一次點擊：同時顯示說明文字 + 分享按鈕
     card.classList.add('cap-visible');
     _capVisibleId=id;
   }
@@ -1425,7 +1426,7 @@ function _doGlobalSearch(q){
     const imgs=getImages(album.id).filter(i=>{
       if(albumMatch) return true; // 相簿符合就顯示所有圖片
       // 圖片名稱或說明符合
-      const imgText=((i.name||'')+' '+(i.caption||'')).toLowerCase();
+      const imgText=(i.caption||'').toLowerCase();
       return tokens.every(t=>imgText.includes(t));
     });
     if(imgs.length){
