@@ -193,7 +193,7 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .lb-save-cap:hover{background:var(--accent-dk)}
 .lb-zoom-indicator{position:absolute;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.55);color:#fff;font-size:.74rem;font-weight:700;padding:4px 13px;border-radius:50px;opacity:0;transition:opacity .3s;pointer-events:none;backdrop-filter:blur(4px);z-index:10}
 .lb-zoom-indicator.show{opacity:1}
-.lb-swipe-hint{position:absolute;bottom:168px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.3);font-size:.72rem;display:none;align-items:center;gap:5px;pointer-events:none}
+.lb-swipe-hint{color:rgba(255,255,255,.35);font-size:.72rem;display:none;align-items:center;gap:5px;pointer-events:none;order:-1}
 @media(hover:none){.lb-swipe-hint{display:flex}.lb-nav{display:none}}
 
 /* ── ADMIN PANEL ── */
@@ -511,13 +511,13 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
     <button class="lb-nav lb-prev" onclick="lbNav(-1)">‹</button>
     <button class="lb-nav lb-next" onclick="lbNav(1)">›</button>
     <div class="lb-zoom-indicator" id="lb-zoom-indicator">100%</div>
+  </div>
+  <div class="lb-bottom-bar">
     <div class="lb-swipe-hint">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
       滑動切換
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
-  </div>
-  <div class="lb-bottom-bar">
     <div class="lb-caption-txt" id="lb-caption"></div>
     <div class="lb-admin-bar">
       <input type="text" class="lb-cap-input" id="lb-cap-input" placeholder="輸入圖片說明…">
@@ -1041,7 +1041,7 @@ function lbNav(d){
   const el=lbImgEl();
   const outX=d>0?'-110vw':'110vw';
   const inX=d>0?'110vw':'-110vw';
-  el.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+  el.style.transition='transform .38s cubic-bezier(.4,0,.2,1)';
   el.style.transform='translateX('+outX+')';
   setTimeout(()=>{
     lbIndex=newIdx;
@@ -1049,9 +1049,9 @@ function lbNav(d){
     el.style.transform='translateX('+inX+')';
     showLbImg();
     el.getBoundingClientRect(); // force reflow
-    el.style.transition='transform .22s cubic-bezier(.4,0,.2,1)';
+    el.style.transition='transform .38s cubic-bezier(.4,0,.2,1)';
     el.style.transform='translateX(0)';
-  },220);
+  },380);
 }
 function showLbImg(){
   const imgs=filteredImages.length?filteredImages:currentImages;
