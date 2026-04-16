@@ -317,6 +317,20 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 #float-back-btn.show{display:inline-flex}
 #float-back-btn:hover{background:rgba(196,149,106,.85);color:#fff;border-color:var(--accent);box-shadow:var(--shadow-sm)}
 
+/* ── FLOATING BACK BUTTON (search results on homepage) ── */
+#float-search-back-btn{position:fixed;top:calc(var(--nav-h) + 10px);left:12px;z-index:99;display:none;align-items:center;gap:6px;padding:7px 14px;font-size:.78rem;font-weight:700;color:var(--text);border-radius:50px;border:1.5px solid rgba(229,221,211,.7);background:rgba(250,248,244,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);cursor:pointer;transition:all var(--tr);white-space:nowrap;box-shadow:0 2px 10px rgba(42,37,32,.10)}
+#float-search-back-btn.show{display:inline-flex}
+#float-search-back-btn:hover{background:rgba(196,149,106,.85);color:#fff;border-color:var(--accent);box-shadow:var(--shadow-sm)}
+
+/* ── TOUCH DEVICE: disable hover transforms to fix iOS double-tap ── */
+@media (hover:none){
+  .album-card:hover{transform:none;box-shadow:var(--shadow-sm)}
+  .album-card:hover .album-cover img{transform:none}
+  .gsr-img-card:hover{transform:none;box-shadow:var(--shadow-sm)}
+  .img-card:hover{transform:none;box-shadow:var(--shadow-sm)}
+  .img-card:hover img{transform:none}
+}
+
 /* ── RESPONSIVE ── */
 @media(max-width:900px){nav{padding:0 16px}.section{padding:22px 13px 56px}.albums-grid{grid-template-columns:repeat(2,1fr);gap:10px}.images-grid{grid-template-columns:repeat(2,1fr);gap:9px}.album-sel-grid{grid-template-columns:1fr}.move-album-grid{grid-template-columns:1fr}}
 @media(max-width:480px){.albums-grid{grid-template-columns:repeat(2,1fr);gap:8px}}
@@ -582,6 +596,12 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
   </div>
 </div>
 
+<!-- FLOAT SEARCH BACK BUTTON (search results on homepage) -->
+<button id="float-search-back-btn" onclick="clearGlobalSearch()">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+  返回所有相簿
+</button>
+
 <!-- FLOAT BACK BUTTON -->
 <button id="float-back-btn" onclick="goHome()">
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
@@ -691,9 +711,6 @@ function renderAlbums(albums){
       <div class="album-info">
         <div class="album-name">${v(a.name)}</div>
         <div class="album-desc">${v(a.desc||'')}</div>
-        <div class="album-footer">
-          <div class="album-arrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></div>
-        </div>
       </div>
     </div>`).join('');
   // Album reorder drag (admin)
@@ -1260,9 +1277,13 @@ function goHome(){
 window.addEventListener('scroll',()=>{
   document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10);
   const av=document.getElementById('album-view');
+  const gsr=document.getElementById('global-search-results');
   const fb=document.getElementById('float-back-btn');
+  const fsb=document.getElementById('float-search-back-btn');
   if(av.style.display!=='none'&&window.scrollY>80){fb.classList.add('show');}
   else{fb.classList.remove('show');}
+  if(av.style.display==='none'&&gsr.classList.contains('show')&&window.scrollY>80){fsb.classList.add('show');}
+  else{fsb.classList.remove('show');}
 });
 
 /* ════════════ ADMIN LOGIN ════════════ */
@@ -1443,6 +1464,7 @@ function globalSearch(q){
   _globalSearchTimer=setTimeout(()=>_doGlobalSearch(q.trim()),300);
 }
 function clearGlobalSearch(){
+  document.getElementById('float-search-back-btn').classList.remove('show');
   document.getElementById('global-search-input').value='';
   globalSearch('');
 }
