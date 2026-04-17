@@ -1256,9 +1256,11 @@ lbArea.addEventListener('wheel',e=>{
   applyZoom(lbScale*(e.deltaY>0?0.85:1.18));
 },{passive:false});
 
-/* ════════════ SWIPE RIGHT TO GO BACK (card animation) ════════════ */
+/* ════════════ SWIPE RIGHT TO GO BACK (mirrors lightbox pull-down) ════════════ */
 {
-  let _cswTarget=null,_cswX=0,_cswY=0,_cswActive=false,_cswLocked=false;
+  // inner = slides (like lbArea)   outer = fades opacity (like lbEl)
+  const _mainEl=document.querySelector('main');
+  let _cswInner=null,_cswAction=null,_cswX=0,_cswY=0,_cswActive=false,_cswLocked=false;
   const SWIPE_THRESH=80;
 
   function _cswGetTarget(){
@@ -1270,57 +1272,68 @@ lbArea.addEventListener('wheel',e=>{
     return null;
   }
 
+  // drag: inner follows finger 1:1 (translateX), outer fades (like lbEl background)
+  function _cswSetPull(dx){
+    const prog=Math.min(dx/window.innerWidth,1);
+    _mainEl.style.opacity=(1-prog*0.7).toFixed(3);
+    _cswInner.style.transform='translateX('+dx+'px)';
+  }
+  // reset: spring back (like _lbResetPull)
+  function _cswReset(){
+    _cswInner.style.transition='transform .28s cubic-bezier(.4,0,.2,1)';
+    _cswInner.style.transform='';
+    _mainEl.style.transition='opacity .28s';
+    _mainEl.style.opacity='';
+    setTimeout(()=>{
+      _cswInner.style.transition='';
+      _mainEl.style.transition='';
+    },300);
+  }
+  // dismiss: slide out + outer fades to 0 (like _lbDismissPull)
+  function _cswDismiss(action){
+    _cswInner.style.transition='transform .26s cubic-bezier(.4,0,.2,1)';
+    _cswInner.style.transform='translateX('+window.innerWidth+'px)';
+    _mainEl.style.transition='opacity .26s';
+    _mainEl.style.opacity='0';
+    setTimeout(()=>{
+      _cswInner.style.transition='';_cswInner.style.transform='';
+      _mainEl.style.transition='';_mainEl.style.opacity='';
+      if(action==='album')goHome();else clearGlobalSearch();
+    },260);
+  }
+
   document.addEventListener('touchstart',e=>{
     if(e.touches.length!==1){_cswActive=false;return;}
     const t=_cswGetTarget();
     if(!t){_cswActive=false;return;}
-    _cswTarget=t;
-    _cswX=e.touches[0].clientX;
-    _cswY=e.touches[0].clientY;
+    _cswInner=t.el;_cswAction=t.action;
+    _cswX=e.touches[0].clientX;_cswY=e.touches[0].clientY;
     _cswActive=true;_cswLocked=false;
   },{passive:true});
 
   document.addEventListener('touchmove',e=>{
-    if(!_cswActive||!_cswTarget)return;
+    if(!_cswActive||!_cswInner)return;
     const dx=e.touches[0].clientX-_cswX;
     const dy=e.touches[0].clientY-_cswY;
     if(!_cswLocked){
       if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
-      // cancel if mostly vertical or moving left
       if(Math.abs(dy)>Math.abs(dx)*0.8||dx<5){_cswActive=false;return;}
       _cswLocked=true;
     }
-    if(dx>0){
-      const el=_cswTarget.el;
-      const prog=Math.min(dx/window.innerWidth,1);
-      el.style.transform=`translateX(${dx}px)`;
-      el.style.boxShadow=`${dx*0.12}px 0 40px rgba(0,0,0,${0.14*(1-prog)})`;
-      el.style.opacity=`${1-prog*0.15}`;
-    }
+    if(dx>0)_cswSetPull(dx);
   },{passive:true});
 
   document.addEventListener('touchend',e=>{
-    if(!_cswActive||!_cswTarget)return;
+    if(!_cswActive||!_cswInner)return;
     _cswActive=false;
-    const {el,action}=_cswTarget;
-    _cswTarget=null;
+    const inner=_cswInner,action=_cswAction;
+    _cswInner=null;_cswAction=null;
     const dx=e.changedTouches[0].clientX-_cswX;
     const dy=e.changedTouches[0].clientY-_cswY;
     if(_cswLocked&&dx>SWIPE_THRESH&&Math.abs(dy)<Math.abs(dx)*0.65){
-      // complete: slide card out to the right
-      el.style.transition='transform .28s cubic-bezier(.4,0,.2,1),opacity .28s,box-shadow .28s';
-      el.style.transform=`translateX(${window.innerWidth}px)`;
-      el.style.opacity='0';
-      setTimeout(()=>{
-        el.style.transition='';el.style.transform='';
-        el.style.opacity='';el.style.boxShadow='';
-        if(action==='album')goHome();else clearGlobalSearch();
-      },280);
+      _cswDismiss(action);
     }else{
-      // snap back
-      el.style.transition='transform .26s cubic-bezier(.4,0,.2,1),opacity .26s,box-shadow .26s';
-      el.style.transform='';el.style.opacity='';el.style.boxShadow='';
-      setTimeout(()=>el.style.transition='',280);
+      _cswReset();
     }
   },{passive:true});
 }
