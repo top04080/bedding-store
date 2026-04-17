@@ -1295,6 +1295,7 @@ lbArea.addEventListener('wheel',e=>{
       hv.style.zIndex='50';hv.style.overflowY='auto';
       hv.style.background='var(--bg)';
       hv.style.transform='translateX(-100%)';
+      hv.scrollTop=_homeScrollY; // 動畫期間首頁面板就顯示正確捲動位置
       // outgoing album-view: fixed, on top
       av.style.position='fixed';av.style.top=top;av.style.left='0';
       av.style.width='100%';av.style.height=h;
@@ -1362,7 +1363,12 @@ lbArea.addEventListener('wheel',e=>{
       hv.style.transition='transform '+DUR;
       av.style.transform='translateX('+window.innerWidth+'px)';
       hv.style.transform='translateX(0)';
-      setTimeout(()=>{_avClean();_hvClean(false);_cswPrepared=false;goHome();},460);
+      setTimeout(()=>{
+        // 先把 window scroll 設為目標位置，再移除 fixed，避免任何閃爍
+        window.scrollTo(0,_homeScrollY);
+        _avClean();_hvClean(false);_cswPrepared=false;
+        goHome();
+      },460);
     }else{
       const hv=_hvEl(),m=document.querySelector('main');
       hv.style.transition='transform '+DUR;
@@ -1518,8 +1524,8 @@ function goHome(){
   document.getElementById('img-search-input').value='';
   document.getElementById('search-clear').classList.remove('show');
   currentAlbumId=null;selectedIds.clear();closeAdminPanel();
-  // 返回首頁時捲回進入相簿前的位置
-  requestAnimationFrame(()=>window.scrollTo(0,_homeScrollY));
+  // 返回首頁時同步捲回進入相簿前的位置（同步呼叫，無閃爍）
+  window.scrollTo(0,_homeScrollY);
 }
 window.addEventListener('scroll',()=>{
   document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10);
