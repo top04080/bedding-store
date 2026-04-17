@@ -169,7 +169,7 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .batch-hint{font-size:.76rem;color:var(--text-muted);margin-bottom:12px;display:none}
 
 /* ── FULLSCREEN LIGHTBOX ── */
-#lightbox{position:fixed;inset:0;z-index:300;background:#000;display:none;flex-direction:column;align-items:stretch;justify-content:stretch;touch-action:none}
+#lightbox{position:fixed;inset:0;z-index:300;background:#000;display:none;flex-direction:column;align-items:stretch;justify-content:stretch;touch-action:none;user-select:none;-webkit-user-select:none}
 #lightbox.open{display:flex}
 .lb-img-area{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
 #lb-img{max-width:100vw;max-height:100%;object-fit:contain;will-change:transform;pointer-events:none;display:block}
@@ -1136,6 +1136,7 @@ document.addEventListener('keydown',e=>{
 });
 /* Desktop double-click to zoom */
 document.getElementById('lb-img-area').addEventListener('dblclick',e=>{
+  e.preventDefault();
   if(lbScale>1){resetZoom();return;}
   const area=document.getElementById('lb-img-area');
   const W=area.offsetWidth,H=area.offsetHeight;
@@ -1281,6 +1282,8 @@ lbArea.addEventListener('wheel',e=>{
     if(action==='album'){
       const av=_avEl(),hv=_hvEl();
       const top=NAV_H+'px',h='calc(100% - '+NAV_H+'px)';
+      // Capture current scroll position before layout change
+      const savedScrollY=window.scrollY||window.pageYOffset||0;
       // incoming home-view: fixed, off-screen left
       hv.style.display='block';
       hv.style.position='fixed';hv.style.top=top;hv.style.left='0';
@@ -1293,6 +1296,8 @@ lbArea.addEventListener('wheel',e=>{
       av.style.width='100%';av.style.height=h;
       av.style.zIndex='51';av.style.overflowY='auto';
       av.style.background='var(--bg)';
+      // Restore scroll position so view does not jump to top
+      av.scrollTop=savedScrollY;
     }
   }
 
