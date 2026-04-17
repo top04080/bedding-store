@@ -166,7 +166,7 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .batch-hint{font-size:.76rem;color:var(--text-muted);margin-bottom:12px;display:none}
 
 /* ── FULLSCREEN LIGHTBOX ── */
-#lightbox{position:fixed;inset:0;z-index:300;background:rgba(8,6,4,.97);display:none;flex-direction:column;align-items:stretch;justify-content:stretch;touch-action:none}
+#lightbox{position:fixed;inset:0;z-index:300;background:#000;display:none;flex-direction:column;align-items:stretch;justify-content:stretch;touch-action:none}
 #lightbox.open{display:flex}
 .lb-img-area{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
 #lb-img{max-width:100vw;max-height:100%;object-fit:contain;will-change:transform;pointer-events:none;display:block}
@@ -1118,8 +1118,7 @@ document.getElementById('lb-img-area').addEventListener('dblclick',e=>{
   const ty=(e.clientY-H/2)*(1-2.5);
   applyZoomSmooth(2.5,tx,ty);
 });
-/* Single click on backdrop closes */
-document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===document.getElementById('lb-img-area')&&lbScale<=1)closeLightbox();});
+
 
 /* Smooth zoom (adds transition for double-tap / double-click) */
 function applyZoomSmooth(scale,tx,ty){
@@ -1138,7 +1137,7 @@ let _pullDY=0,_gestureDir=null;
 
 function _lbSetPull(dy){
   const prog=Math.min(1,Math.abs(dy)/220);
-  lbEl.style.background='rgba(8,6,4,'+(0.97*(1-prog*0.7))+')';
+  lbEl.style.background='rgba(0,0,0,'+(1*(1-prog*0.7))+')';
   lbArea.style.transform='translateY('+dy+'px)';
 }
 function _lbResetPull(){
