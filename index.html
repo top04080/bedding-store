@@ -1719,6 +1719,7 @@ function clearGlobalSearch(){
   document.getElementById('float-search-back-btn').classList.remove('show');
   document.getElementById('global-search-input').value='';
   globalSearch('');
+  document.getElementById('albums-view').scrollTop=0;
 }
 function _doGlobalSearch(q){
   const lq=q.toLowerCase().trim();
