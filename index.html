@@ -53,6 +53,8 @@ main{padding-top:var(--nav-h)}
 
 /* ── ALBUMS ── */
 #albums-view{display:block}#album-view{display:none}
+/* 兩個 view 都是 fixed 面板，window 永遠不捲動，各自管理 scrollTop */
+#albums-view,#album-view{position:fixed;top:var(--nav-h);left:0;right:0;bottom:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .albums-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
 .album-card{background:var(--surface);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow-sm);cursor:pointer;transition:transform var(--tr),box-shadow var(--tr);position:relative}
 .album-card:hover{transform:translateY(-5px);box-shadow:var(--shadow-md)}
@@ -112,7 +114,7 @@ main{padding-top:var(--nav-h)}
 .search-clear.show{display:block}
 
 /* ── BATCH BAR ── */
-#batch-bar{display:none;position:sticky;top:var(--nav-h);z-index:90;background:#2A2520;color:#fff;padding:10px 22px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#batch-bar{display:none;position:sticky;top:0;z-index:90;background:#2A2520;color:#fff;padding:10px 22px;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 #batch-bar.show{display:flex}
 .batch-info{font-size:.82rem;font-weight:600}
 .batch-actions{display:flex;gap:6px;flex-wrap:wrap}
@@ -748,7 +750,7 @@ function searchHotItems(){
   inp.value='*';
   document.getElementById('global-search-clear').classList.add('show');
   globalSearch('*');
-  window.scrollTo({top:0,behavior:'smooth'});
+  document.getElementById('albums-view').scrollTop=0;
 }
 
 /* ════════════ ALBUM REORDER (drag-drop) ════════════ */
@@ -808,9 +810,9 @@ function renderAlbumSortList(){
 }
 
 /* ════════════ OPEN ALBUM ════════════ */
-let _homeScrollY=0; // 記錄進入相簿前首頁的捲動位置
+let _homeScrollY=0; // 記錄進入相簿前首頁面板的捲動位置
 function openAlbum(id){
-  _homeScrollY=window.scrollY||window.pageYOffset||0; // 記住首頁捲動位置
+  _homeScrollY=document.getElementById('albums-view').scrollTop; // 記住首頁面板捲動位置
   currentAlbumId=id;currentImages=[];filteredImages=[];currentPage=0;selectedIds.clear();
   const album=allAlbums.find(a=>a.id===id);if(!album)return;
   // 讀取此相簿儲存的排序模式（預設newest）
@@ -819,6 +821,7 @@ function openAlbum(id){
   document.getElementById('albums-view').style.display='none';
   const _av=document.getElementById('album-view');
   _av.style.display='block';
+  _av.scrollTop=0; // 相簿從頂端開始，直接設定面板 scrollTop，無跳動
   _av.classList.remove('card-slide-in');
   void _av.offsetWidth;
   _av.classList.add('card-slide-in');
@@ -832,7 +835,6 @@ function openAlbum(id){
   document.getElementById('panel-info-section').style.display='block';
   document.getElementById('images-grid').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
   document.getElementById('load-more-wrap').style.display='none';
-  window.scrollTo({top:0,behavior:'smooth'});
   setTimeout(()=>{syncSortSelect();loadImages();},60);
   if(isAdmin){populatePanel();openAdminPanel();}
 }
@@ -1282,7 +1284,7 @@ lbArea.addEventListener('wheel',e=>{
   function _cswPrepare(action){
     if(_cswPrepared)return;
     _cswPrepared=true;
-    _cswSavedScrollY=window.scrollY||window.pageYOffset||0; // 記錄當前捲動位置
+    _cswSavedScrollY=_avEl().scrollTop; // 記錄相簿面板當前捲動位置
     if(action==='album'){
       const av=_avEl(),hv=_hvEl();
       const top=NAV_H+'px',h='calc(100% - '+NAV_H+'px)';
@@ -1341,8 +1343,7 @@ lbArea.addEventListener('wheel',e=>{
       hv.style.transform='translateX(-100%)';
       setTimeout(()=>{
         _avClean();_hvClean(true);_cswPrepared=false;
-        // 還原右滑前的捲動位置，避免頁面跳至頂端
-        window.scrollTo(0,_cswSavedScrollY);
+        // 面板 scrollTop 自動保留，不需要額外還原
       },460);
     }else{
       const hv=_hvEl(),m=document.querySelector('main');
@@ -1364,10 +1365,8 @@ lbArea.addEventListener('wheel',e=>{
       av.style.transform='translateX('+window.innerWidth+'px)';
       hv.style.transform='translateX(0)';
       setTimeout(()=>{
-        // 先把 window scroll 設為目標位置，再移除 fixed，避免任何閃爍
-        window.scrollTo(0,_homeScrollY);
         _avClean();_hvClean(false);_cswPrepared=false;
-        goHome();
+        goHome(); // goHome 直接設定 albums-view.scrollTop，無跳動
       },460);
     }else{
       const hv=_hvEl(),m=document.querySelector('main');
@@ -1524,20 +1523,20 @@ function goHome(){
   document.getElementById('img-search-input').value='';
   document.getElementById('search-clear').classList.remove('show');
   currentAlbumId=null;selectedIds.clear();closeAdminPanel();
-  // 返回首頁時同步捲回進入相簿前的位置（同步呼叫，無閃爍）
-  window.scrollTo(0,_homeScrollY);
+  // 返回首頁面板時直接設定 scrollTop，無任何跳動
+  document.getElementById('albums-view').scrollTop=_homeScrollY;
 }
-window.addEventListener('scroll',()=>{
-  document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10);
-  const av=document.getElementById('album-view');
+/* 面板捲動監聽（取代 window scroll，因為 window 不再捲動） */
+function _onPanelScroll(panelEl){
+  const s=panelEl.scrollTop;
+  document.getElementById('navbar').classList.toggle('scrolled',s>10);
+  const isAlbum=panelEl.id==='album-view';
   const gsr=document.getElementById('global-search-results');
-  const fb=document.getElementById('float-back-btn');
-  const fsb=document.getElementById('float-search-back-btn');
-  if(av.style.display!=='none'&&window.scrollY>80){fb.classList.add('show');}
-  else{fb.classList.remove('show');}
-  if(av.style.display==='none'&&gsr.classList.contains('show')&&window.scrollY>80){fsb.classList.add('show');}
-  else{fsb.classList.remove('show');}
-});
+  document.getElementById('float-back-btn').classList.toggle('show',isAlbum&&s>80);
+  document.getElementById('float-search-back-btn').classList.toggle('show',!isAlbum&&gsr.classList.contains('show')&&s>80);
+}
+document.getElementById('albums-view').addEventListener('scroll',function(){_onPanelScroll(this);},{passive:true});
+document.getElementById('album-view').addEventListener('scroll',function(){_onPanelScroll(this);},{passive:true});
 
 /* ════════════ ADMIN LOGIN ════════════ */
 function toggleAdmin(){
