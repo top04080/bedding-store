@@ -808,7 +808,9 @@ function renderAlbumSortList(){
 }
 
 /* ════════════ OPEN ALBUM ════════════ */
+let _homeScrollY=0; // 記錄進入相簿前首頁的捲動位置
 function openAlbum(id){
+  _homeScrollY=window.scrollY||window.pageYOffset||0; // 記住首頁捲動位置
   currentAlbumId=id;currentImages=[];filteredImages=[];currentPage=0;selectedIds.clear();
   const album=allAlbums.find(a=>a.id===id);if(!album)return;
   // 讀取此相簿儲存的排序模式（預設newest）
@@ -1262,6 +1264,7 @@ lbArea.addEventListener('wheel',e=>{
   const NAV_H=68; // matches --nav-h
   const DUR='.44s cubic-bezier(.4,0,.2,1)';
   let _cswAction=null,_cswX=0,_cswY=0,_cswActive=false,_cswLocked=false,_cswPrepared=false;
+  let _cswSavedScrollY=0; // 右滑期間保存視窗捲動位置
 
   const _avEl=()=>document.getElementById('album-view');
   const _hvEl=()=>document.getElementById('albums-view');
@@ -1279,11 +1282,12 @@ lbArea.addEventListener('wheel',e=>{
   function _cswPrepare(action){
     if(_cswPrepared)return;
     _cswPrepared=true;
+    _cswSavedScrollY=window.scrollY||window.pageYOffset||0; // 記錄當前捲動位置
     if(action==='album'){
       const av=_avEl(),hv=_hvEl();
       const top=NAV_H+'px',h='calc(100% - '+NAV_H+'px)';
       // Capture current scroll position before layout change
-      const savedScrollY=window.scrollY||window.pageYOffset||0;
+      const savedScrollY=_cswSavedScrollY;
       // incoming home-view: fixed, off-screen left
       hv.style.display='block';
       hv.style.position='fixed';hv.style.top=top;hv.style.left='0';
@@ -1334,7 +1338,11 @@ lbArea.addEventListener('wheel',e=>{
       hv.style.transition='transform '+DUR;
       av.style.transform='translateX(0)';
       hv.style.transform='translateX(-100%)';
-      setTimeout(()=>{_avClean();_hvClean(true);_cswPrepared=false;},460);
+      setTimeout(()=>{
+        _avClean();_hvClean(true);_cswPrepared=false;
+        // 還原右滑前的捲動位置，避免頁面跳至頂端
+        window.scrollTo(0,_cswSavedScrollY);
+      },460);
     }else{
       const hv=_hvEl(),m=document.querySelector('main');
       hv.style.transition='transform '+DUR;
@@ -1383,8 +1391,9 @@ lbArea.addEventListener('wheel',e=>{
     const dx=e.touches[0].clientX-_cswX;
     const dy=e.touches[0].clientY-_cswY;
     if(!_cswLocked){
-      if(Math.abs(dx)<8&&Math.abs(dy)<8)return;
-      if(Math.abs(dy)>Math.abs(dx)*0.8||dx<5){_cswActive=false;return;}
+      if(Math.abs(dx)<6&&Math.abs(dy)<6)return;
+      // 方向鎖定：允許斜向滑動（比例放寬至 1.2），且須向右滑
+      if(Math.abs(dy)>Math.abs(dx)*1.2||dx<5){_cswActive=false;return;}
       _cswLocked=true;
     }
     if(dx>0)_cswSetPull(dx,_cswAction);
@@ -1396,8 +1405,8 @@ lbArea.addEventListener('wheel',e=>{
     const action=_cswAction;_cswAction=null;
     const dx=e.changedTouches[0].clientX-_cswX;
     const dy=e.changedTouches[0].clientY-_cswY;
-    // trigger dismiss when swiped past 1/3 of screen width
-    if(_cswLocked&&dx>window.innerWidth/3&&Math.abs(dy)<Math.abs(dx)*0.65){
+    // 降低觸發閾值至 1/5 螢幕寬，提高右滑靈敏度
+    if(_cswLocked&&dx>window.innerWidth/5&&Math.abs(dy)<Math.abs(dx)*0.65){
       _cswDismiss(action);
     }else{
       _cswReset(action);
@@ -1509,6 +1518,8 @@ function goHome(){
   document.getElementById('img-search-input').value='';
   document.getElementById('search-clear').classList.remove('show');
   currentAlbumId=null;selectedIds.clear();closeAdminPanel();
+  // 返回首頁時捲回進入相簿前的位置
+  requestAnimationFrame(()=>window.scrollTo(0,_homeScrollY));
 }
 window.addEventListener('scroll',()=>{
   document.getElementById('navbar').classList.toggle('scrolled',window.scrollY>10);
