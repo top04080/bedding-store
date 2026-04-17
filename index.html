@@ -1035,7 +1035,7 @@ function closeLightbox(){
   const _la=document.getElementById('lb-img-area');
   if(_la){_la.style.transform='';_la.style.transition='';}
   const _lb=document.getElementById('lightbox');
-  if(_lb){_lb.style.opacity='';_lb.style.transition='';}
+  if(_lb){_lb.style.opacity='';_lb.style.transition='';_lb.style.background='';}
   document.getElementById('lightbox').classList.remove('open');
   document.body.style.overflow='';
 }
