@@ -849,7 +849,7 @@ function loadImages(){
 function applyImgSearch(){
   const q=_imgSearchQ.toLowerCase().trim();
   filteredImages=q?currentImages.filter(i=>(i.caption||'').toLowerCase().includes(q)):currentImages;
-  renderImages(filteredImages.slice(0,(currentPage+1)*PAGE), filteredImages.length>(currentPage+1)*PAGE);
+  renderImages(filteredImages, false);
 }
 function filterImages(q){
   _imgSearchQ=q;currentPage=0;
