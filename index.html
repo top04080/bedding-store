@@ -134,6 +134,8 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
 .quick-nav-btn svg{flex-shrink:0}
 .quick-nav-btn.hot{color:#C0420A;border-color:#FDDBC8;background:#FFF6F0}
 .quick-nav-btn.hot:hover{background:linear-gradient(135deg,#E85C1A,#C0420A);border-color:#C0420A;color:#fff}
+.quick-nav-btn.new{color:#2E7D32;border-color:#C8E6C9;background:#F1FBF1}
+.quick-nav-btn.new:hover{background:linear-gradient(135deg,#43A047,#2E7D32);border-color:#2E7D32;color:#fff}
 
 /* ── CAPACITY BAR ── */
 .capacity-bar-bg{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
@@ -733,13 +735,18 @@ function renderAlbums(albums){
 function renderQuickNav(albums){
   const nav=document.getElementById('quick-nav');
   if(!nav||!albums.length) return;
-  const last3=albums.slice(-3);
+  const last2=albums.slice(-2);
   // 火焰 SVG (自繪，無外部依賴)
   const flameSvg=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c0 0-4 4-4 9a4 4 0 008 0c0-2-1-4-1-4s-1 3-3 3-2-2-2-4c0-1.5 2-4 2-4z" fill="currentColor" stroke="none"/><path d="M12 22c-3.3 0-6-2.7-6-6 0-4 3-8 6-10 3 2 6 6 6 10 0 3.3-2.7 6-6 6z" fill="none"/><path d="M12 17c-1.1 0-2-.9-2-2 0-1.5 2-3 2-3s2 1.5 2 3c0 1.1-.9 2-2 2z" fill="currentColor" stroke="none"/></svg>`;
+  // 新品 SVG (閃爍星形)
+  const newSvg=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" stroke="none"/></svg>`;
   const hotBtn=`<button class="quick-nav-btn hot" onclick="searchHotItems()">
     ${flameSvg}熱銷商品
   </button>`;
-  nav.innerHTML=hotBtn+last3.map(a=>`
+  const newBtn=`<button class="quick-nav-btn new" onclick="searchNewItems()">
+    ${newSvg}新品上市
+  </button>`;
+  nav.innerHTML=hotBtn+newBtn+last2.map(a=>`
     <button class="quick-nav-btn" onclick="openAlbum('${a.id}')">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
       ${v(a.name)}
@@ -750,6 +757,13 @@ function searchHotItems(){
   inp.value='*';
   document.getElementById('global-search-clear').classList.add('show');
   globalSearch('*');
+  document.getElementById('albums-view').scrollTop=0;
+}
+function searchNewItems(){
+  const inp=document.getElementById('global-search-input');
+  inp.value='.';
+  document.getElementById('global-search-clear').classList.add('show');
+  globalSearch('.');
   document.getElementById('albums-view').scrollTop=0;
 }
 
