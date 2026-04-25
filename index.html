@@ -693,129 +693,26 @@ function init(){
 /* ════════════ JSONBIN ════════════ */
 const JB_URL=`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 const JB_HDR={'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY,'X-Bin-Versioning':'false'};
-async function jbFetch(url,opts={}){
-  const r=await fetch(url,{headers:{'X-Master-Key':JSONBIN_KEY,...(opts.headers||{})},...opts});
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  return r.json();
-}
-async function jbGet(){return(await jbFetch(JB_URL+'/latest')).record;}
-/* 建立新 bin，回傳 bin ID */
-async function jbCreate(name,data){
-  const r=await fetch('https://api.jsonbin.io/v3/b',{
-    method:'POST',
-    headers:{...JB_HDR,'X-Bin-Name':name,'X-Bin-Private':'false'},
-    body:JSON.stringify(data)
-  });
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  return(await r.json()).metadata.id;
-}
-/* 寫入指定 bin，帶重試 */
-async function jbPut(binId,data,retries=4){
-  const url=`https://api.jsonbin.io/v3/b/${binId}`;
-  for(let i=0;i<retries;i++){
-    const r=await fetch(url,{method:'PUT',headers:JB_HDR,body:JSON.stringify(data)});
-    if(r.ok)return;
-    const s=r.status;
-    if((s===429||s>=500)&&i<retries-1){await new Promise(res=>setTimeout(res,1500*(i+1)));continue;}
-    throw new Error('HTTP '+s);
-  }
-}
-
-/* ════════════ 讀取雲端 ════════════ */
+async function jbGet(){const r=await fetch(JB_URL+'/latest',{headers:{'X-Master-Key':JSONBIN_KEY}});if(!r.ok)throw new Error(r.status);return(await r.json()).record;}
+async function jbSet(d){const r=await fetch(JB_URL,{method:'PUT',headers:JB_HDR,body:JSON.stringify(d)});if(!r.ok)throw new Error(r.status);}
 async function loadFromCloud(){
   try{
     const d=await jbGet();
-    if(d.albums&&d.albums.length>0){
-      const localStr=localStorage.getItem(LS_ALBUMS);
-      const localMap=localStr?Object.fromEntries(JSON.parse(localStr).map(a=>[a.id,a])):{};
-      allAlbums=d.albums.map(ca=>{
-        const localImgs=localMap[ca.id]?.images;
-        const cloudImgs=ca.images;
-        const imgs=Array.isArray(localImgs)&&localImgs.length>0?localImgs
-                  :Array.isArray(cloudImgs)&&cloudImgs.length>0?cloudImgs
-                  :[];
-        if(imgs.length>0)localStorage.setItem(LS_IMGS+ca.id,JSON.stringify(imgs));
-        return{...ca,images:imgs};
-      });
-      localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
-      renderAlbums(allAlbums);
-    }else await saveToCloud();
+    if(d.albums&&d.albums.length>0){allAlbums=d.albums;localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));renderAlbums(allAlbums);}
+    else await saveToCloud();
   }catch(e){console.warn('JSONBin load fail',e);}
 }
-
-/* ════════════ CLOUD SAVE（主 bin，僅 metadata） ════════════ */
-let _saveTimer=null,_saving=false;
-async function flushToCloud(snapshot){
-  if(_saving){setTimeout(()=>flushToCloud(snapshot),800);return;}
-  _saving=true;
-  try{await jbPut(JSONBIN_ID,snapshot);}
-  catch(e){console.error('JSONBin save fail',e.message);showToast(`雲端同步失敗（${e.message}）本機已存`,'error');}
-  finally{_saving=false;}
-}
-function buildMetaSnapshot(){
-  return{albums:allAlbums.map(({images:_,...rest})=>rest)};
-}
 async function saveToCloud(){
+  if(jbReady)try{await jbSet({albums:allAlbums});}catch(e){console.error('JSONBin save fail',e);showToast('雲端同步失敗（本機已存）','error');}
   localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
-  if(!jbReady)return;
-  const snapshot=buildMetaSnapshot();
-  clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(()=>flushToCloud(snapshot),1200);
-}
-async function saveToCloudNow(){
-  clearTimeout(_saveTimer);
-  localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
-  if(!jbReady)return;
-  try{await jbPut(JSONBIN_ID,buildMetaSnapshot());}
-  catch(e){console.error('saveToCloudNow fail',e.message);}
 }
 
 /* ════════════ ALBUM HELPERS ════════════ */
-const LS_IMGS='hp_imgs_v4_';
-function getImages(albumId){
-  const cached=localStorage.getItem(LS_IMGS+albumId);
-  if(cached)return JSON.parse(cached);
-  return(allAlbums.find(a=>a.id===albumId)?.images)||[];
-}
-
-/* 圖片儲存：per-album bin，帶防抖 */
-const _imgSaveTimers={};
+function getImages(albumId){return(allAlbums.find(a=>a.id===albumId)?.images)||[];}
 async function saveImages(albumId,imgs){
   const a=allAlbums.find(x=>x.id===albumId);
-  if(!a)return;
-  a.images=imgs;a.imageCount=imgs.length;
-  localStorage.setItem(LS_IMGS+albumId,JSON.stringify(imgs));
+  if(a){a.images=imgs;a.imageCount=imgs.length;}
   await saveToCloud();
-  if(!jbReady)return;
-  clearTimeout(_imgSaveTimers[albumId]);
-  const snap=[...imgs];
-  _imgSaveTimers[albumId]=setTimeout(async()=>{
-    try{
-      if(!a.imgBinId){
-        a.imgBinId=await jbCreate('hp_imgs_'+albumId,{images:snap});
-        await saveToCloudNow();
-      }else{
-        await jbPut(a.imgBinId,{images:snap});
-      }
-    }catch(e){
-      console.error('圖片雲端同步失敗',e.message);
-      showToast(`圖片同步失敗（${e.message}）本機已存`,'error');
-    }
-  },1200);
-}
-
-/* 開啟相簿時，若本機無快取則從雲端拉取 */
-async function fetchImagesFromCloud(albumId){
-  const a=allAlbums.find(x=>x.id===albumId);
-  const cached=localStorage.getItem(LS_IMGS+albumId);
-  if(cached&&JSON.parse(cached).length>0)return;
-  if(a?.imgBinId){
-    try{
-      const d=await jbFetch(`https://api.jsonbin.io/v3/b/${a.imgBinId}/latest`);
-      const imgs=d.record?.images||[];
-      if(imgs.length>0){a.images=imgs;localStorage.setItem(LS_IMGS+albumId,JSON.stringify(imgs));}
-    }catch(e){console.warn('圖片載入失敗',e.message);}
-  }
 }
 
 /* ════════════ RENDER ALBUMS ════════════ */
@@ -976,10 +873,7 @@ function openAlbum(id){
   document.getElementById('panel-info-section').style.display='block';
   document.getElementById('images-grid').innerHTML='<div class="spinner-wrap"><div class="spinner"></div></div>';
   document.getElementById('load-more-wrap').style.display='none';
-  // 懶加載：若本機無快取則先從雲端拉取此相簿的圖片
-  fetchImagesFromCloud(id).then(()=>{
-    setTimeout(()=>{syncSortSelect();loadImages();},60);
-  });
+  setTimeout(()=>{syncSortSelect();loadImages();},60);
   if(isAdmin){populatePanel();openAdminPanel();}
 }
 
