@@ -739,26 +739,21 @@ function renderAlbums(albums){
   renderQuickNav(albums);
 }
 
-/* ════════════ LOGO LONG-PRESS → 管理後台 ════════════ */
-let _logoTimer=null;
+/* ════════════ LOGO DOUBLE-CLICK → 管理後台 ════════════ */
+let _logoClickCount=0,_logoClickTimer=null;
 function handleLogoClick(){
-  // 單擊回首頁
-  goHome();
+  _logoClickCount++;
+  if(_logoClickCount===1){
+    _logoClickTimer=setTimeout(()=>{
+      _logoClickCount=0;
+      goHome();
+    },350);
+  } else if(_logoClickCount>=2){
+    clearTimeout(_logoClickTimer);
+    _logoClickCount=0;
+    toggleAdmin();
+  }
 }
-document.addEventListener('DOMContentLoaded',()=>{
-  const logo=document.querySelector('.nav-logo');
-  if(!logo)return;
-  // 長按 800ms 觸發後台
-  logo.addEventListener('pointerdown',()=>{
-    _logoTimer=setTimeout(()=>{
-      _logoTimer=null;
-      toggleAdmin();
-    },800);
-  });
-  logo.addEventListener('pointerup',()=>{if(_logoTimer){clearTimeout(_logoTimer);_logoTimer=null;}});
-  logo.addEventListener('pointerleave',()=>{if(_logoTimer){clearTimeout(_logoTimer);_logoTimer=null;}});
-  logo.addEventListener('contextmenu',e=>e.preventDefault());
-});
 function renderQuickNav(albums){
   const nav=document.getElementById('quick-nav');
   if(!nav||!albums.length) return;
