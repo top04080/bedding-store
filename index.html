@@ -711,8 +711,10 @@ async function saveImages(albumId,imgs){
 /* ════════════ RENDER ALBUMS ════════════ */
 function renderAlbums(albums){
   const grid=document.getElementById('albums-grid');
-  if(!albums.length){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-muted)">尚無相簿</div>`;return;}
-  grid.innerHTML=albums.map(a=>`
+  // 非管理員：隱藏空相簿
+  const displayAlbums=isAdmin?albums:albums.filter(a=>(a.imageCount||0)>0);
+  if(!displayAlbums.length){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-muted)">尚無相簿</div>`;return;}
+  grid.innerHTML=displayAlbums.map(a=>`
     <div class="album-card" data-id="${a.id}" onclick="openAlbum('${a.id}')">
       <div class="album-cover">
         ${a.coverUrl?`<img src="${v(a.coverUrl)}" alt="${v(a.name)}" loading="lazy">`
@@ -727,7 +729,7 @@ function renderAlbums(albums){
     </div>`).join('');
   // Album reorder drag (admin)
   if(isAdmin) initAlbumReorder();
-  // 更新快速導覽按鈕（最後 4 個相簿）
+  // 更新快速導覽按鈕（最後 2 個有圖片的相簿）
   renderQuickNav(albums);
 }
 
@@ -735,7 +737,9 @@ function renderAlbums(albums){
 function renderQuickNav(albums){
   const nav=document.getElementById('quick-nav');
   if(!nav||!albums.length) return;
-  const last2=albums.slice(-2);
+  // 非管理員只顯示有圖片的相簿
+  const visibleAlbums=isAdmin?albums:albums.filter(a=>(a.imageCount||0)>0);
+  const last2=visibleAlbums.slice(-2);
   // 火焰 SVG (自繪，無外部依賴)
   const flameSvg=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c0 0-4 4-4 9a4 4 0 008 0c0-2-1-4-1-4s-1 3-3 3-2-2-2-4c0-1.5 2-4 2-4z" fill="currentColor" stroke="none"/><path d="M12 22c-3.3 0-6-2.7-6-6 0-4 3-8 6-10 3 2 6 6 6 10 0 3.3-2.7 6-6 6z" fill="none"/><path d="M12 17c-1.1 0-2-.9-2-2 0-1.5 2-3 2-3s2 1.5 2 3c0 1.1-.9 2-2 2z" fill="currentColor" stroke="none"/></svg>`;
   // 新品 SVG (閃爍星形)
