@@ -703,33 +703,44 @@ async function loadFromCloud(){
   }catch(e){console.warn('JSONBin load fail',e);}
 }
 /* ════════════ CLOUD SAVE（防抖 + 重試） ════════════ */
-let _saveTimer=null,_saving=false,_pendingSave=false;
-async function jbSetWithRetry(d,retries=3){
-  for(let i=0;i<retries;i++){
-    const r=await fetch(JB_URL,{method:'PUT',headers:JB_HDR,body:JSON.stringify(d)});
-    if(r.ok)return;
-    if(r.status===429&&i<retries-1){await new Promise(res=>setTimeout(res,1500*(i+1)));continue;}
-    throw new Error(r.status);
+let _saveTimer=null,_saving=false;
+async function flushToCloud(snapshot){
+  if(_saving){
+    // 等待上一次完成後再用最新快照重試
+    await new Promise(res=>setTimeout(res,600));
+    if(!_saving){await flushToCloud(JSON.parse(localStorage.getItem(LS_ALBUMS)||'{}'));}
+    return;
   }
-}
-async function flushToCloud(){
-  if(_saving){_pendingSave=true;return;}
-  _saving=true;_pendingSave=false;
+  _saving=true;
   try{
-    await jbSetWithRetry({albums:allAlbums});
+    for(let i=0;i<4;i++){
+      try{
+        const r=await fetch(JB_URL,{method:'PUT',headers:JB_HDR,body:JSON.stringify(snapshot)});
+        if(r.ok){_saving=false;return;}
+        const status=r.status;
+        if(status===429||status>=500){
+          await new Promise(res=>setTimeout(res,1200*(i+1)));
+          continue;
+        }
+        throw new Error('HTTP '+status);
+      }catch(fetchErr){
+        if(i<3){await new Promise(res=>setTimeout(res,1200*(i+1)));continue;}
+        throw fetchErr;
+      }
+    }
+    throw new Error('超過重試次數');
   }catch(e){
-    console.error('JSONBin save fail',e);
-    showToast('雲端同步失敗（本機已存）','error');
-  }finally{
-    _saving=false;
-    if(_pendingSave) setTimeout(flushToCloud,500);
-  }
+    console.error('JSONBin save fail',e.message);
+    showToast(`雲端同步失敗（${e.message}）本機已存，稍後請重試`,'error');
+  }finally{_saving=false;}
 }
 async function saveToCloud(){
   localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
   if(!jbReady)return;
+  // 用快照避免延遲期間資料被覆蓋的問題
+  const snapshot={albums:JSON.parse(JSON.stringify(allAlbums))};
   clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(flushToCloud,1500);
+  _saveTimer=setTimeout(()=>flushToCloud(snapshot),1200);
 }
 
 /* ════════════ ALBUM HELPERS ════════════ */
