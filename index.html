@@ -702,9 +702,34 @@ async function loadFromCloud(){
     else await saveToCloud();
   }catch(e){console.warn('JSONBin load fail',e);}
 }
+/* ════════════ CLOUD SAVE（防抖 + 重試） ════════════ */
+let _saveTimer=null,_saving=false,_pendingSave=false;
+async function jbSetWithRetry(d,retries=3){
+  for(let i=0;i<retries;i++){
+    const r=await fetch(JB_URL,{method:'PUT',headers:JB_HDR,body:JSON.stringify(d)});
+    if(r.ok)return;
+    if(r.status===429&&i<retries-1){await new Promise(res=>setTimeout(res,1500*(i+1)));continue;}
+    throw new Error(r.status);
+  }
+}
+async function flushToCloud(){
+  if(_saving){_pendingSave=true;return;}
+  _saving=true;_pendingSave=false;
+  try{
+    await jbSetWithRetry({albums:allAlbums});
+  }catch(e){
+    console.error('JSONBin save fail',e);
+    showToast('雲端同步失敗（本機已存）','error');
+  }finally{
+    _saving=false;
+    if(_pendingSave) setTimeout(flushToCloud,500);
+  }
+}
 async function saveToCloud(){
-  if(jbReady)try{await jbSet({albums:allAlbums});}catch(e){console.error('JSONBin save fail',e);showToast('雲端同步失敗（本機已存）','error');}
   localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
+  if(!jbReady)return;
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(flushToCloud,1500);
 }
 
 /* ════════════ ALBUM HELPERS ════════════ */
