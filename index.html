@@ -511,6 +511,9 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       Cloudinary / JSONBin 設定說明
     </button>
+    <button class="btn btn-secondary" onclick="showDataSize()" style="font-size:.76rem">📊 查看資料量（JSONBin 限制 100KB）</button>
+    <button class="btn btn-secondary" onclick="diagCloudRaw()" style="font-size:.76rem">☁️ 比較雲端 vs 本機張數</button>
+    <button class="btn btn-secondary" onclick="forceCloudSync()" style="font-size:.76rem;color:#C0420A;border-color:#FDDBC8">🔄 強制同步本機→雲端（搶救資料）</button>
   </div>
 </div>
 
@@ -693,17 +696,83 @@ function init(){
 /* ════════════ JSONBIN ════════════ */
 const JB_URL=`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
 const JB_HDR={'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY,'X-Bin-Versioning':'false'};
+const LS_UPDATED_AT='hp_updatedAt_v4';
 async function jbGet(){const r=await fetch(JB_URL+'/latest',{headers:{'X-Master-Key':JSONBIN_KEY}});if(!r.ok)throw new Error(r.status);return(await r.json()).record;}
 async function jbSet(d){const r=await fetch(JB_URL,{method:'PUT',headers:JB_HDR,body:JSON.stringify(d)});if(!r.ok)throw new Error(r.status);}
+
+/* 計算一份 albums 陣列裡的「實際圖片總數」（images陣列長度之和，非 imageCount）*/
+function _countRealImages(albums){return(albums||[]).reduce((s,a)=>s+(Array.isArray(a.images)?a.images.length:0),0);}
+
+/* 偵測並修補 imageCount 與 images 陣列不一致的問題 */
+function _fixImageCountDesync(albums){
+  let fixed=false;
+  (albums||[]).forEach(a=>{
+    const real=Array.isArray(a.images)?a.images.length:0;
+    if((a.imageCount||0)!==real){
+      console.warn(`相簿「${a.name}」imageCount=${a.imageCount} 但 images.length=${real}，已自動修正`);
+      a.imageCount=real;
+      fixed=true;
+    }
+  });
+  return fixed;
+}
+
 async function loadFromCloud(){
   try{
     const d=await jbGet();
-    if(d.albums&&d.albums.length>0){allAlbums=d.albums;localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));renderAlbums(allAlbums);}
-    else await saveToCloud();
+    if(!d.albums||!d.albums.length){await saveToCloud();return;}
+
+    const cloudTime  = d.updatedAt||0;
+    const localTime  = parseInt(localStorage.getItem(LS_UPDATED_AT)||'0');
+    const cloudImgs  = _countRealImages(d.albums);
+    const localImgs  = _countRealImages(allAlbums);
+
+    console.info(`[同步診斷] 雲端：${cloudImgs}張 t=${cloudTime} | 本機：${localImgs}張 t=${localTime}`);
+
+    /* 決策：時間戳有效時優先用時間，否則用實際圖片總數判斷哪份資料更豐富 */
+    const useCloud = cloudTime>0||localTime>0
+      ? cloudTime>=localTime      // 有時間戳：用時間比
+      : cloudImgs>=localImgs;     // 都沒時間戳（舊格式）：用圖片數比
+
+    if(useCloud){
+      allAlbums=d.albums;
+      _fixImageCountDesync(allAlbums);
+      localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
+      if(cloudTime>0) localStorage.setItem(LS_UPDATED_AT,String(cloudTime));
+      renderAlbums(allAlbums);
+      /* 如果雲端圖片數比本機少，主動提示可能有資料遺失 */
+      if(cloudImgs<localImgs){
+        showToast(`⚠️ 雲端圖片(${cloudImgs}張)少於本機(${localImgs}張)，若有遺失請點「搶救資料」`,'error');
+      }
+    } else {
+      /* 本機較豐富 → 推上雲端 */
+      console.info(`本機資料較新（${localImgs}張 > 雲端${cloudImgs}張），同步上傳…`);
+      showToast(`🔄 本機有較多資料(${localImgs}張 vs 雲端${cloudImgs}張)，同步中…`);
+      await saveToCloud();
+    }
+
+    /* 無論如何都診斷目前 allAlbums 是否有 imageCount 與 images 不符 */
+    const desynced=allAlbums.filter(a=>(a.imageCount||0)>0&&(!Array.isArray(a.images)||a.images.length===0));
+    if(desynced.length>0){
+      console.error('發現資料不一致的相簿：',desynced.map(a=>a.name));
+      showToast(`⚠️ 發現 ${desynced.length} 個相簿的照片資料遺失（張數顯示但圖片空白），請點「搶救資料」`,'error');
+    }
   }catch(e){console.warn('JSONBin load fail',e);}
 }
+
 async function saveToCloud(){
-  if(jbReady)try{await jbSet({albums:allAlbums});}catch(e){console.error('JSONBin save fail',e);showToast('雲端同步失敗（本機已存）','error');}
+  _fixImageCountDesync(allAlbums); // 存前先修正
+  const payload={albums:allAlbums,updatedAt:Date.now()};
+  const json=JSON.stringify(payload);
+  const sizeKB=Math.round(new Blob([json]).size/1024);
+  if(sizeKB>90) showToast(`⚠️ 資料量 ${sizeKB}KB 已接近 JSONBin 上限(100KB)，建議刪除部分圖片`,'error');
+  if(jbReady)try{
+    await jbSet(payload);
+    localStorage.setItem(LS_UPDATED_AT,String(payload.updatedAt));
+  }catch(e){
+    console.error('JSONBin save fail',e);
+    showToast(`雲端同步失敗（${sizeKB}KB${sizeKB>90?' 超過上限':''}），資料已存本機`,'error');
+  }
   localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums));
 }
 
@@ -1726,6 +1795,71 @@ async function doCloudinaryUpload(file,iid,album,thumbUrl){
 
 /* ════════════ GUIDE ════════════ */
 function openGuide(){window.open('cloudinary-guide.html','_blank');}
+
+/* ════════════ 診斷 & 搶救 ════════════ */
+function showDataSize(){
+  const json=JSON.stringify({albums:allAlbums});
+  const sizeKB=Math.round(new Blob([json]).size/1024);
+  const totalImgCount=allAlbums.reduce((s,a)=>s+(a.imageCount||0),0);
+  const totalRealImgs=_countRealImages(allAlbums);
+  const desynced=allAlbums.filter(a=>(a.imageCount||0)>0&&(!Array.isArray(a.images)||a.images.length===0));
+  const lsTime=parseInt(localStorage.getItem(LS_UPDATED_AT)||'0');
+  let msg=`📊 資料診斷報告\n`;
+  msg+=`━━━━━━━━━━━━━━━━━\n`;
+  msg+=`• JSON 資料量：${sizeKB}KB / 100KB\n`;
+  msg+=`• imageCount 合計：${totalImgCount} 張\n`;
+  msg+=`• images[] 實際資料：${totalRealImgs} 張\n`;
+  msg+=`• 本機時間戳：${lsTime?new Date(lsTime).toLocaleString():'未設定'}\n`;
+  msg+=`━━━━━━━━━━━━━━━━━\n`;
+  if(desynced.length>0){
+    msg+=`❌ 發現資料不一致的相簿（${desynced.length} 個）：\n`;
+    desynced.forEach(a=>{msg+=`  • ${a.name}：顯示${a.imageCount}張但images[]空\n`;});
+    msg+=`\n→ 圖片URL已遺失，需從JSONBin歷史版本或重新上傳恢復\n`;
+  } else if(totalImgCount!==totalRealImgs){
+    msg+=`⚠️ imageCount(${totalImgCount}) ≠ 實際圖片(${totalRealImgs})，已標記待修正\n`;
+  } else {
+    msg+=`✅ 資料一致，共 ${totalRealImgs} 張\n`;
+  }
+  if(sizeKB>90) msg+=`\n⚠️ 資料量已超過90KB，建議刪除部分圖片！`;
+  alert(msg);
+}
+async function forceCloudSync(){
+  if(!confirm('將把本機localStorage資料強制覆蓋上傳至JSONBin。\n確定繼續？'))return;
+  const payload={albums:allAlbums,updatedAt:Date.now()};
+  const sizeKB=Math.round(new Blob([JSON.stringify(payload)]).size/1024);
+  showToast(`資料量：${sizeKB}KB，上傳中…`);
+  try{
+    await jbSet(payload);
+    localStorage.setItem(LS_UPDATED_AT,String(payload.updatedAt));
+    showToast(`✅ 強制同步成功（${sizeKB}KB）`,'success');
+  }catch(e){
+    showToast(`❌ 失敗，${sizeKB}KB 可能超過JSONBin 100KB限制`,'error');
+    console.error(e);
+  }
+}
+async function diagCloudRaw(){
+  try{
+    showToast('讀取JSONBin原始資料…');
+    const d=await jbGet();
+    const cloudImgs=_countRealImages(d.albums);
+    const localImgs=_countRealImages(allAlbums);
+    const cloudTime=d.updatedAt?new Date(d.updatedAt).toLocaleString():'無';
+    let msg=`☁️ JSONBin 雲端現況\n━━━━━━━━━━━━━━━\n`;
+    msg+=`• 時間戳：${cloudTime}\n`;
+    msg+=`• 相簿數：${(d.albums||[]).length}\n`;
+    msg+=`• 實際圖片：${cloudImgs} 張\n\n`;
+    msg+=`💻 本機 localStorage\n━━━━━━━━━━━━━━━\n`;
+    msg+=`• 實際圖片：${localImgs} 張\n\n`;
+    if(cloudImgs<localImgs){
+      msg+=`⚠️ 本機(${localImgs}張) > 雲端(${cloudImgs}張)\n→ 請點「強制同步本機→雲端」`;
+    } else if(cloudImgs>localImgs){
+      msg+=`⚠️ 雲端(${cloudImgs}張) > 本機(${localImgs}張)\n→ 請重整頁面從雲端載入`;
+    } else {
+      msg+=`✅ 雲端與本機張數一致`;
+    }
+    alert(msg);
+  }catch(e){alert('讀取失敗：'+e.message);}
+}
 
 /* ════════════ UTILS ════════════ */
 function v(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
