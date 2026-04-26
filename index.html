@@ -500,6 +500,19 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
       <input type="file" id="file-input" multiple accept="image/*" onchange="handleFiles(this.files)">
       <div id="upload-list"></div>
     </div>
+    <!-- 從 Cloudinary 重建 -->
+    <div class="panel-section" id="panel-rebuild">
+      <span class="panel-label" style="color:#C0420A">🔧 從 Cloudinary 重建圖片索引</span>
+      <div style="font-size:.75rem;color:var(--text-muted);line-height:1.6;margin-bottom:10px">
+        圖片仍安全存在 Cloudinary，需輸入 <strong>API Key</strong> 和 <strong>API Secret</strong>（可在 Cloudinary 控制台 → Settings → API Keys 找到）來重建索引。金鑰僅在此次操作中使用，不會儲存。
+      </div>
+      <div class="field"><label>API Key</label><input type="text" id="rb-api-key" placeholder="例：123456789012345"></div>
+      <div class="field"><label>API Secret</label><input type="password" id="rb-api-secret" placeholder="輸入 API Secret"></div>
+      <div id="rb-progress" style="font-size:.75rem;color:var(--accent);margin:8px 0;min-height:1.2em"></div>
+      <button class="btn btn-primary" onclick="rebuildFromCloudinary()" style="background:#C0420A;border-color:#C0420A;width:100%">
+        🔄 開始從 Cloudinary 重建
+      </button>
+    </div>
     <!-- 相簿排序 -->
     <div class="panel-section">
       <span class="panel-label">相簿排列順序（拖曳調整）</span>
@@ -1837,6 +1850,99 @@ async function forceCloudSync(){
     console.error(e);
   }
 }
+/* ════════════ 從 Cloudinary 重建圖片索引 ════════════ */
+async function rebuildFromCloudinary(){
+  const apiKey    = document.getElementById('rb-api-key').value.trim();
+  const apiSecret = document.getElementById('rb-api-secret').value.trim();
+  const prog      = document.getElementById('rb-progress');
+  if(!apiKey||!apiSecret){showToast('請輸入 API Key 和 API Secret','error');return;}
+  if(!confirm('將從 Cloudinary 資料夾「hengpeng/」讀取所有照片並重建索引。\n現有 JSONBin 資料將被覆蓋。確定繼續？'))return;
+
+  const authHeader = 'Basic ' + btoa(apiKey + ':' + apiSecret);
+  const CLOUD = CLOUD_NAME;
+  let allResources = [];
+  let nextCursor   = null;
+  let page         = 0;
+
+  prog.textContent = '讀取 Cloudinary 圖片清單…';
+  try{
+    // 分頁撈取 hengpeng/ 資料夾下所有圖片（最多 500 張/次）
+    do {
+      page++;
+      prog.textContent = `讀取中…第 ${page} 批（已取得 ${allResources.length} 張）`;
+      const url = new URL(`https://api.cloudinary.com/v1_1/${CLOUD}/resources/image/upload`);
+      url.searchParams.set('prefix',  'hengpeng/');
+      url.searchParams.set('type',    'upload');
+      url.searchParams.set('max_results', '500');
+      if(nextCursor) url.searchParams.set('next_cursor', nextCursor);
+
+      const r = await fetch(url.toString(), {headers:{Authorization: authHeader}});
+      if(!r.ok){
+        const err = await r.json().catch(()=>({error:{message:r.statusText}}));
+        throw new Error(err?.error?.message || r.statusText);
+      }
+      const data = await r.json();
+      allResources.push(...(data.resources||[]));
+      nextCursor = data.next_cursor || null;
+    } while(nextCursor);
+
+    if(!allResources.length){
+      prog.textContent = '⚠️ 在 hengpeng/ 資料夾下找不到任何圖片';
+      showToast('Cloudinary 中找不到 hengpeng/ 資料夾的圖片','error');
+      return;
+    }
+
+    prog.textContent = `共找到 ${allResources.length} 張，重建相簿索引中…`;
+
+    // 依 public_id 歸入對應相簿（格式：hengpeng/{albumId}/filename）
+    const albumMap = {};
+    allResources.forEach(res => {
+      const parts = res.public_id.split('/');           // ['hengpeng','albumId','filename']
+      const albumId = parts.length >= 2 ? parts[1] : 'uncategorized';
+      if(!albumMap[albumId]) albumMap[albumId] = [];
+      albumMap[albumId].push({
+        id: res.public_id.replace(/\//g,'_') + '_' + (new Date(res.created_at).getTime()||Date.now()),
+        publicId:   res.public_id,
+        url:        res.secure_url,
+        name:       parts[parts.length-1] || res.public_id,
+        caption:    '',
+        uploadedAt: res.created_at || new Date().toISOString()
+      });
+    });
+
+    // 依上傳時間排序（最新在前）
+    Object.values(albumMap).forEach(arr => arr.sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt)));
+
+    // 將圖片寫入 allAlbums（保留現有相簿結構，只更新 images[]）
+    let rebuilt = 0;
+    Object.entries(albumMap).forEach(([albumId, imgs])=>{
+      let album = allAlbums.find(a=>a.id===albumId);
+      if(!album){
+        // 找不到預設相簿 → 建新的
+        album = {id:albumId, name:albumId, desc:'', coverUrl:'', imageCount:0, images:[]};
+        allAlbums.push(album);
+      }
+      album.images     = imgs;
+      album.imageCount = imgs.length;
+      if(imgs.length && !album.coverUrl) album.coverUrl = imgs[0].url;
+      rebuilt += imgs.length;
+    });
+
+    prog.textContent = `✅ 重建完成！共還原 ${rebuilt} 張照片，同步中…`;
+    document.getElementById('rb-api-key').value='';
+    document.getElementById('rb-api-secret').value='';
+
+    await saveToCloud();
+    renderAlbums(allAlbums);
+    showToast(`✅ 已從 Cloudinary 重建 ${rebuilt} 張照片`,'success');
+    prog.textContent = `✅ 完成！已還原 ${rebuilt} 張，並同步至雲端。`;
+  }catch(e){
+    prog.textContent = '❌ 失敗：' + e.message;
+    showToast('重建失敗：' + e.message,'error');
+    console.error(e);
+  }
+}
+
 async function diagCloudRaw(){
   try{
     showToast('讀取JSONBin原始資料…');
