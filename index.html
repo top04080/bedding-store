@@ -508,7 +508,8 @@ body:not(.admin-mode) .admin-only-btn{display:none!important}
       </div>
       <div class="field"><label>API Key</label><input type="text" id="rb-api-key" placeholder="例：123456789012345"></div>
       <div class="field"><label>API Secret</label><input type="password" id="rb-api-secret" placeholder="輸入 API Secret"></div>
-      <div id="rb-progress" style="font-size:.75rem;color:var(--accent);margin:8px 0;min-height:1.2em"></div>
+      <div class="field"><label>資料夾前綴（留空＝全部）</label><input type="text" id="rb-prefix" placeholder="例：hengpeng/（不確定請留空）"></div>
+      <div id="rb-progress" style="font-size:.75rem;color:var(--accent);margin:8px 0;min-height:1.4em;white-space:pre-wrap"></div>
       <button class="btn btn-primary" onclick="rebuildFromCloudinary()" style="background:#C0420A;border-color:#C0420A;width:100%">
         🔄 開始從 Cloudinary 重建
       </button>
@@ -1875,92 +1876,111 @@ async function forceCloudSync(){
 async function rebuildFromCloudinary(){
   const apiKey    = document.getElementById('rb-api-key').value.trim();
   const apiSecret = document.getElementById('rb-api-secret').value.trim();
+  const prefix    = document.getElementById('rb-prefix').value.trim();
   const prog      = document.getElementById('rb-progress');
   if(!apiKey||!apiSecret){showToast('請輸入 API Key 和 API Secret','error');return;}
-  if(!confirm('將從 Cloudinary 資料夾「hengpeng/」讀取所有照片並重建索引。\n現有 JSONBin 資料將被覆蓋。確定繼續？'))return;
+  if(!confirm('將從 Cloudinary 讀取所有照片並重建索引。\n現有 JSONBin 資料將被覆蓋，確定繼續？'))return;
 
-  const authHeader = 'Basic ' + btoa(apiKey + ':' + apiSecret);
-  const CLOUD = CLOUD_NAME;
-  let allResources = [];
-  let nextCursor   = null;
-  let page         = 0;
+  /* Cloudinary Admin API 不支援瀏覽器直接呼叫（CORS限制），改用 CORS Proxy 中繼 */
+  const PROXY   = 'https://corsproxy.io/?url=';
+  const CLOUD   = CLOUD_NAME;
+  const authB64 = btoa(apiKey + ':' + apiSecret);
 
+  async function fetchPage(cursor){
+    const target = new URL(`https://api.cloudinary.com/v1_1/${CLOUD}/resources/image/upload`);
+    if(prefix)  target.searchParams.set('prefix', prefix);
+    target.searchParams.set('type', 'upload');
+    target.searchParams.set('max_results', '500');
+    if(cursor)  target.searchParams.set('next_cursor', cursor);
+
+    /* 先試直連，CORS 失敗再走 Proxy */
+    const tryFetch = async (useProxy)=>{
+      const reqUrl = useProxy ? PROXY + encodeURIComponent(target.toString()) : target.toString();
+      const headers = useProxy
+        ? {'x-requested-with':'XMLHttpRequest', 'x-corsproxy-auth': 'Basic '+authB64}
+        : {Authorization: 'Basic '+authB64};
+      return fetch(reqUrl, {headers});
+    };
+
+    let r = await tryFetch(false).catch(()=>null);
+    if(!r||!r.ok){
+      prog.textContent += '\n（直連受 CORS 限制，改用 Proxy 中繼…）';
+      r = await tryFetch(true);
+    }
+    if(!r.ok){
+      let msg = r.statusText;
+      try{ const j=await r.json(); msg=j?.error?.message||msg; }catch(_){}
+      if(r.status===401) msg='API Key 或 Secret 錯誤，請重新確認';
+      if(r.status===403) msg='權限不足，請確認此 API Key 有 Admin API 存取權';
+      throw new Error(`HTTP ${r.status}：${msg}`);
+    }
+    return r.json();
+  }
+
+  let allResources=[], nextCursor=null, page=0;
   prog.textContent = '讀取 Cloudinary 圖片清單…';
   try{
-    // 分頁撈取 hengpeng/ 資料夾下所有圖片（最多 500 張/次）
-    do {
+    do{
       page++;
-      prog.textContent = `讀取中…第 ${page} 批（已取得 ${allResources.length} 張）`;
-      const url = new URL(`https://api.cloudinary.com/v1_1/${CLOUD}/resources/image/upload`);
-      url.searchParams.set('prefix',  'hengpeng/');
-      url.searchParams.set('type',    'upload');
-      url.searchParams.set('max_results', '500');
-      if(nextCursor) url.searchParams.set('next_cursor', nextCursor);
-
-      const r = await fetch(url.toString(), {headers:{Authorization: authHeader}});
-      if(!r.ok){
-        const err = await r.json().catch(()=>({error:{message:r.statusText}}));
-        throw new Error(err?.error?.message || r.statusText);
-      }
-      const data = await r.json();
+      prog.textContent = `讀取中… 第${page}批（已取得 ${allResources.length} 張）`;
+      const data = await fetchPage(nextCursor);
       allResources.push(...(data.resources||[]));
-      nextCursor = data.next_cursor || null;
-    } while(nextCursor);
+      nextCursor = data.next_cursor||null;
+    }while(nextCursor);
 
     if(!allResources.length){
-      prog.textContent = '⚠️ 在 hengpeng/ 資料夾下找不到任何圖片';
-      showToast('Cloudinary 中找不到 hengpeng/ 資料夾的圖片','error');
+      prog.textContent = `⚠️ 找不到任何圖片${prefix?'（前綴：'+prefix+'）':''}\n請確認資料夾名稱，或清空前綴欄位重試`;
+      showToast('找不到圖片，請確認資料夾前綴','error');
       return;
     }
 
-    prog.textContent = `共找到 ${allResources.length} 張，重建相簿索引中…`;
+    prog.textContent = `找到 ${allResources.length} 張，重建相簿索引中…`;
 
-    // 依 public_id 歸入對應相簿（格式：hengpeng/{albumId}/filename）
-    const albumMap = {};
-    allResources.forEach(res => {
-      const parts = res.public_id.split('/');           // ['hengpeng','albumId','filename']
-      const albumId = parts.length >= 2 ? parts[1] : 'uncategorized';
-      if(!albumMap[albumId]) albumMap[albumId] = [];
+    /* 依 public_id 路徑歸入相簿：{prefix}/{albumId}/filename 或 {albumId}/filename */
+    const albumMap={};
+    allResources.forEach(res=>{
+      const parts = res.public_id.split('/');
+      /* 自動偵測層級：若 prefix 有值取 parts[prefixDepth]，否則取 parts[0] */
+      const depth  = prefix ? prefix.replace(/\/$/,'').split('/').length : 0;
+      const albumId= parts.length>depth+1 ? parts[depth] : (parts[0]||'uncategorized');
+      if(!albumMap[albumId]) albumMap[albumId]=[];
       albumMap[albumId].push({
-        id: res.public_id.replace(/\//g,'_') + '_' + (new Date(res.created_at).getTime()||Date.now()),
+        id: res.public_id.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+(new Date(res.created_at).getTime()||Date.now()),
         publicId:   res.public_id,
         url:        res.secure_url,
-        name:       parts[parts.length-1] || res.public_id,
+        name:       parts[parts.length-1]||res.public_id,
         caption:    '',
-        uploadedAt: res.created_at || new Date().toISOString()
+        uploadedAt: res.created_at||new Date().toISOString()
       });
     });
 
-    // 依上傳時間排序（最新在前）
-    Object.values(albumMap).forEach(arr => arr.sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt)));
+    Object.values(albumMap).forEach(arr=>arr.sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt)));
 
-    // 將圖片寫入 allAlbums（保留現有相簿結構，只更新 images[]）
-    let rebuilt = 0;
-    Object.entries(albumMap).forEach(([albumId, imgs])=>{
-      let album = allAlbums.find(a=>a.id===albumId);
+    let rebuilt=0;
+    Object.entries(albumMap).forEach(([albumId,imgs])=>{
+      let album=allAlbums.find(a=>a.id===albumId);
       if(!album){
-        // 找不到預設相簿 → 建新的
-        album = {id:albumId, name:albumId, desc:'', coverUrl:'', imageCount:0, images:[]};
+        album={id:albumId,name:albumId,desc:'',coverUrl:'',imageCount:0,images:[]};
         allAlbums.push(album);
       }
-      album.images     = imgs;
-      album.imageCount = imgs.length;
-      if(imgs.length && !album.coverUrl) album.coverUrl = imgs[0].url;
-      rebuilt += imgs.length;
+      album.images    =imgs;
+      album.imageCount=imgs.length;
+      if(imgs.length&&!album.coverUrl) album.coverUrl=imgs[0].url;
+      rebuilt+=imgs.length;
     });
 
-    prog.textContent = `✅ 重建完成！共還原 ${rebuilt} 張照片，同步中…`;
+    prog.textContent=`✅ 還原 ${rebuilt} 張，同步至雲端中…`;
     document.getElementById('rb-api-key').value='';
     document.getElementById('rb-api-secret').value='';
 
     await saveToCloud();
     renderAlbums(allAlbums);
     showToast(`✅ 已從 Cloudinary 重建 ${rebuilt} 張照片`,'success');
-    prog.textContent = `✅ 完成！已還原 ${rebuilt} 張，並同步至雲端。`;
+    prog.textContent=`✅ 完成！已還原 ${rebuilt} 張並同步至雲端`;
   }catch(e){
-    prog.textContent = '❌ 失敗：' + e.message;
-    showToast('重建失敗：' + e.message,'error');
-    console.error(e);
+    prog.textContent='❌ 失敗：'+e.message;
+    showToast('重建失敗：'+e.message,'error');
+    console.error('[rebuildFromCloudinary]',e);
   }
 }
 
