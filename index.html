@@ -793,21 +793,23 @@ async function loadFromCloud(){
 
 async function saveToCloud(){
   _fixImageCountDesync(allAlbums);
+  const now=Date.now();
   const slim=_slimForStorage(allAlbums);          // 移除 url/name，節省空間
-  const payload={albums:slim,updatedAt:Date.now()};
+  const payload={albums:slim,updatedAt:now};
   const json=JSON.stringify(payload);
   const sizeKB=Math.round(new Blob([json]).size/1024);
   console.info(`[saveToCloud] 資料量：${sizeKB}KB`);
   if(sizeKB>90) showToast(`⚠️ 資料量 ${sizeKB}KB 仍接近上限，請刪除部分圖片`,'error');
+  // ✅ 先更新本機時間戳（無論雲端是否成功），確保下次載入時本機優先
+  localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums)); // 本機存完整版（含url）
+  localStorage.setItem(LS_UPDATED_AT,String(now));
   if(jbReady)try{
     await jbSet(payload);
-    localStorage.setItem(LS_UPDATED_AT,String(payload.updatedAt));
     showToast(`✅ 雲端同步成功（${sizeKB}KB）`,'success');
   }catch(e){
     console.error('JSONBin save fail',e);
-    showToast(`❌ 雲端同步失敗（${sizeKB}KB）：${e.message}`,'error');
+    showToast(`⚠️ 雲端同步失敗（${sizeKB}KB），資料已保留在本機`,'error');
   }
-  localStorage.setItem(LS_ALBUMS,JSON.stringify(allAlbums)); // 本機存完整版（含url）
 }
 
 /* ════════════ ALBUM HELPERS ════════════ */
@@ -1808,7 +1810,7 @@ async function doCloudinaryUpload(file,iid,album,thumbUrl){
     if(!res.ok)throw new Error((await res.json()).error?.message||res.statusText);
     const data=await res.json();
     bar.style.width='100%';pct.innerHTML='<span class="up-done">✓ 完成</span>';
-    const imgData={id:data.public_id.replace(/\//g,'_')+'_'+Date.now(),publicId:data.public_id,url:data.secure_url,name:file.name,caption:'',uploadedAt:new Date().toISOString()};
+    const _ts=Date.now();const imgData={id:data.public_id.replace(/\//g,'_')+'_'+_ts,publicId:data.public_id,url:data.secure_url,name:'img_'+_ts,caption:'',uploadedAt:new Date().toISOString()};
     let imgs=getImages(currentAlbumId);
     // 依目前排序模式決定插入位置
     if(currentSort==='oldest'){
